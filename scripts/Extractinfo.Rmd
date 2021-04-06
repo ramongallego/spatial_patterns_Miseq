@@ -1,0 +1,51 @@
+---
+title: "Capturing the x:y location"
+output: html_notebook
+---
+The first step in this process is finding a quick way of extracting the x:y grid from the sequence header.
+
+<!-- For this bit I will only work with a subset of 10k reads (Skip) -->
+
+<!-- ```{bash} -->
+<!-- source ~/.bash_profile -->
+
+<!-- cd ../data -->
+<!-- mkdir subset -->
+<!-- seqtk sample -s100 fastqs/Positive-1_S19_L001_R1_001.fastq 10000 > subset/Positive-1_S19_L001_R1_001.fastq -->
+<!-- seqtk sample -s100 fastqs/Positive-1_S19_L001_R2_001.fastq 10000 > subset/Positive-1_S19_L001_R2_001.fastq -->
+<!-- ``` -->
+
+Now, create a tabulated output of the header, we only need the R1 or R2
+
+```{bash}
+cd ..
+for file in data/subset/*_L001_R1_001.fastq; do
+ 
+ 
+ OUTPUTfile="$(basename $file)"
+ OUTPUTname="${OUTPUTfile%_L001_R1_001.fastq}"
+ OUTPUT=data/stats/"$OUTPUTname".csv
+ #echo "$OUTPUT"
+ awk -v n="{}" 'BEGIN{FS=":";OFS=","}NR%4==1{print $5,$6,$7}' $file > "$OUTPUT"
+done
+```
+
+Cool. I think we are done here
+
+```{r}
+library(here)
+outputs <- list.files(path = here("data","stats"), pattern = "*.csv")
+library(tidyverse)
+map(outputs, ~ read_csv(here("data", "stats", .x), col_names = c( "tile", "x", "y")) %>% 
+            rownames_to_column("pos") %>%  separate(y, into = "y", sep = " ", convert = T) %>% 
+            separate(tile, into = c("surface", "tile"), sep = -2 )) %>% 
+        flatten_df -> onelib 
+        
+onelib %>% distinct(surface)
+onelib %>% distinct(tile) %>% arrange(desc(tile))
+
+ggplot(onelib,aes(x =x, y = y)) + geom_point(aes(color = tile)) + facet_grid(rows = vars(tile), cols = vars(surface))
+
+ggplot(onelib, aes(x = tile)) + geom_histogram()
+```
+
