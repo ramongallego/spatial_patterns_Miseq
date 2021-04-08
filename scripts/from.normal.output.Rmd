@@ -1,0 +1,155 @@
+---
+title: "Compare Input with filtF1"
+output: html_notebook
+editor_options: 
+  chunk_output_type: console
+---
+A much easier prospect. Given that I have the normal and the filt. fastq files, I can extract the info from the Fastq headers of both, make them into a tibble and see which ones match
+
+# Extract info from aftercutadapt 
+I'm going to comment it out here and show it only as pretend code. FOr each header of the original fastq file, get the info ab the location of the individual read
+
+
+| cd ..
+| for file in /Users/ramon.gallegosimon/Projects/dada2/data/noprimers/*_L001_R1_001.fastq; do
+ 
+ 
+ | OUTPUTfile="$(basename $file)"
+ | OUTPUTname="${OUTPUTfile%_L001_R1_001.fastq}"
+ | OUTPUT=/Users/ramon.gallegosimon/Projects/dada2/data/stats_raw/"$OUTPUTname".csv
+ | #echo "$OUTPUT"
+ | awk -v n="{}" 'BEGIN{FS=":";OFS=","}NR%4==1{print $5,$6,$7}' $file > "$OUTPUT"
+| done
+
+
+# Extract info from filter
+
+Do the same for the output of FilterAndTrim, but uncompress all files, run the chunk, compress them all again
+
+<!-- ```{bash} -->
+| cd /Users/ramon.gallegosimon/Projects/dada2/output/output_2021-04-07/filtered
+
+| pigz -d *.gz
+
+| for file in /Users/ramon.gallegosimon/Projects/dada2/output/output_2021-04-07/filtered/*F1_filt.fastq; do
+ 
+
+ 
+ | OUTPUTfile="$(basename $file)"
+ | OUTPUTname="${OUTPUTfile%_F1_filt.fastq}"
+ | OUTPUT=/Users/ramon.gallegosimon/Projects/dada2/data/stats_filtered/"$OUTPUTname".csv
+ | #echo "$OUTPUT"
+ | awk -v n="{}" 'BEGIN{FS=":";OFS=","}NR%4==1{print $5,$6,$7}' $file > "$OUTPUT"
+
+ | done
+
+| cd /Users/ramon.gallegosimon/Projects/dada2/output/output_2021-04-07/filtered
+| pigz  *.fastq
+
+
+
+## Now check that the file names are the same (in different folders)
+
+```{r, eval=FALSE}
+list.files(path = "/Users/ramon.gallegosimon/Projects/dada2/data/stats_filtered/") == list.files(path = "/Users/ramon.gallegosimon/Projects/dada2/data/stats_raw/")
+```
+Ok, now, for each pair of files, do keep track of which passed, which didn;t and their position in the original and final dataset
+
+```{r,  eval=FALSE}
+filtered.files <-list.files ("/Users/ramon.gallegosimon/Projects/dada2/data/stats_filtered/", full.names = T)
+raw.files <- list.files("/Users/ramon.gallegosimon/Projects/dada2/data/stats_raw/", full.names = T)
+
+
+
+map(filtered.files, ~ read_csv(.x,  col_names = c( "tile", "x", "y"))) -> filtered.stats
+
+map(raw.files,  ~ read_csv(.x,  col_names = c( "tile", "x", "y"))) -> raw.stats
+
+
+# Now for each pair of files, we can map which ones passed and which ones stayed
+
+map2(raw.stats, filtered.stats, anti_join)
+
+```
+
+## Now bring in the mid.point.rds and the output files from a run
+
+```{r}
+library(here)
+library(tidyverse)
+
+after.mergers <- read_rds(here("data"," half.point.rds"))
+
+hash_key <- read_csv(here("data","hash_key.csv"))
+
+ASV_file <- read_csv(here("data","ASV_table.csv"))
+
+```
+
+# Let's get to mix them all
+
+```{r}
+
+after.mergers %>% 
+  mutate(tracking =pmap(.l = list(derepF1,derepR1, dadaF1, dadaR1, mergers ),
+                        .f = function(a,b,c,d,e){
+                          tibble(derepF = a$map,
+                                 derepR = b$map)
+                          
+                        })) -> after.mergers
+
+after.mergers %>% 
+  mutate(tracking = pmap(.l = list(tracking, dadaF1, dadaR1),
+                         .f = function(a,b,c){
+                           a %>% 
+                             left_join(tibble(dadaF = b$map) %>% rownames_to_column("derepF") %>% mutate(derepF = as.numeric(derepF))) %>% 
+                             left_join(tibble(dadaR = c$map) %>% rownames_to_column("derepR") %>% mutate(derepR = as.numeric(derepR)))
+                           
+                         } )) -> after.mergers.2
+
+after.mergers.2 %>% 
+  mutate(tracking = map2(tracking, mergers, function(.x,.y){
+    .x %>% 
+    left_join(.y, by = c("dadaF" = "forward", "dadaR" ="reverse"))
+  })) -> after.mergers.2
+
+
+after.mergers.2 %>% 
+  pull(tracking) %>% set_names(after.mergers.2$basename) -> fate.seqs
+```
+
+```{r}
+map2(filtered.stats, fate.seqs, bind_cols) -> fate.with.filters
+
+fate.with.filters %>% set_names(after.mergers.2$basename) %>% map(~left_join(.x, hash_key, by = c("sequence"= "Sequence"))) -> fate.with.Hash
+
+fate.with.Hash %>% 
+  bind_rows(.id = "Sample_name") -> fate.long
+
+# From the fate_long tabke, we can slimmer it by taking Hash, Sample, tile, x,y
+
+fate.long %>% 
+  select(Sample_name, tile, x,y, Hash) %>% write_csv(here("output", "location.table.csv"))
+
+ASV_file %>% 
+  filter (str_detect(Sample_name, "Positive")) %>% 
+  group_by(Hash) %>% tally(wt = nReads, sort = T  ) %>% slice(1) %>% pull(Hash) -> In.Positive.ctrl
+
+fate.long %>% 
+  select(Sample_name, tile, x,y, Hash) %>% 
+  separate(tile, into = c("surface", "tile"), sep = -2 ) %>%
+  filter (Hash %in% In.Positive.ctrl) -> Hashes.positive
+
+Hashes.positive %>% 
+  group_by(Hash, str_detect(Sample_name,"Positive")) %>% 
+  tally() 
+
+  Hashes.positive %>% separate(y, into = "y", sep = " ", convert = T) -> Hashes.positive
+    
+ggplot(Hashes.positive, aes(x =x, y = y)) + geom_point(aes(color = str_detect(Sample_name, "Positive"))) + facet_grid(rows = vars(tile), cols = vars(surface))
+
+
+```
+
+
+

@@ -4,15 +4,15 @@ output: html_notebook
 ---
 The first step in this process is finding a quick way of extracting the x:y grid from the sequence header.
 
-<!-- For this bit I will only work with a subset of 10k reads (Skip) -->
+For this bit I will only work with a subset of 10k reads (Skip)
 
 <!-- ```{bash} -->
 <!-- source ~/.bash_profile -->
 
 <!-- cd ../data -->
 <!-- mkdir subset -->
-<!-- seqtk sample -s100 fastqs/Positive-1_S19_L001_R1_001.fastq 10000 > subset/Positive-1_S19_L001_R1_001.fastq -->
-<!-- seqtk sample -s100 fastqs/Positive-1_S19_L001_R2_001.fastq 10000 > subset/Positive-1_S19_L001_R2_001.fastq -->
+<!-- seqtk sample -s100 fastqs/Locus_1_Positive-1_S19_L001_R1_001.fastq 10000 > subset/Positive-1_S19_L001_R1_001.fastq -->
+<!-- seqtk sample -s100 fastqs/Locus_1_Positive-1_S19_L001_R2_001.fastq 10000 > subset/Positive-1_S19_L001_R2_001.fastq -->
 <!-- ``` -->
 
 Now, create a tabulated output of the header, we only need the R1 or R2
