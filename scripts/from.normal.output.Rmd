@@ -129,7 +129,10 @@ fate.with.Hash %>%
 # From the fate_long tabke, we can slimmer it by taking Hash, Sample, tile, x,y
 
 fate.long %>% 
-  select(Sample_name, tile, x,y, Hash) %>% write_csv(here("output", "location.table.csv"))
+  select(Sample_name, tile, x,y, Hash) %>% 
+  separate(tile, into = c("surface", "tile"), sep = -2 ) %>%
+  separate(y, into = "y", sep = " ", convert = T) %>%
+  write_csv(here("output", "location.table.csv"))
 
 ASV_file %>% 
   filter (str_detect(Sample_name, "Positive")) %>% 
@@ -138,6 +141,8 @@ ASV_file %>%
 fate.long %>% 
   select(Sample_name, tile, x,y, Hash) %>% 
   separate(tile, into = c("surface", "tile"), sep = -2 ) %>%
+  separate(y, into = "y", sep = " ", convert = T) %>% 
+
   filter (Hash %in% In.Positive.ctrl) -> Hashes.positive
 
 Hashes.positive %>% 
